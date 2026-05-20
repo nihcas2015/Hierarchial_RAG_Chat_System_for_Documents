@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Chat System - Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>RAG Chat</h2>
+                <button id="mobileMenuClose" class="mobile-menu-close">✕</button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-page="chat">
+                    <span class="icon">💬</span> New Chat
+                </button>
+                <button class="nav-item" data-page="documents">
+                    <span class="icon">📄</span> Documents
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="logout-btn">
+                    <span class="icon">🚪</span> Logout
+                </button>
+                <div class="user-info">
+                    <span id="userEmail">user@example.com</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <button id="mobileMenuOpen" class="mobile-menu-open">☰</button>
+                <h1 id="pageTitle">New Chat</h1>
+                <div class="header-actions"></div>
+            </header>
+
+            <!-- Chat Page -->
+            <section id="chatPage" class="page active">
+                <div class="chat-area">
+                    <div id="chatMessages" class="chat-messages">
+                        <div class="welcome-message">
+                            <h2>Welcome to RAG Chat</h2>
+                            <p>Upload documents and ask questions about them</p>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <div class="file-upload-section">
+                            <input 
+                                type="file" 
+                                id="fileInput" 
+                                accept=".pdf,.txt,.doc,.docx" 
+                                style="display: none;"
+                            >
+                            <button id="uploadBtn" class="upload-btn">
+                                <span class="icon">📎</span> Attach File
+                            </button>
+                            <span id="fileName" class="file-name"></span>
+                        </div>
+
+                        <form id="chatForm" class="chat-form">
+                            <input 
+                                type="text" 
+                                id="messageInput" 
+                                class="message-input" 
+                                placeholder="Ask a question about your documents..."
+                                autocomplete="off"
+                            >
+                            <button type="submit" class="send-btn">
+                                <span>Send</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Documents Page -->
+            <section id="documentsPage" class="page">
+                <div class="documents-area">
+                    <div class="documents-header">
+                        <h2>Your Documents</h2>
+                        <button id="uploadDocBtn" class="primary-btn">
+                            <span class="icon">📤</span> Upload Document
+                        </button>
+                    </div>
+
+                    <div id="documentsList" class="documents-list">
+                        <div class="empty-state">
+                            <p>No documents yet</p>
+                            <p class="subtitle">Upload a document to get started</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal for file upload -->
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Upload Document</h3>
+                <button class="modal-close" data-close="uploadModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="file-upload-area" id="fileUploadArea">
+                    <input 
+                        type="file" 
+                        id="modalFileInput" 
+                        accept=".pdf,.txt,.doc,.docx" 
+                        style="display: none;"
+                    >
+                    <div class="upload-prompt">
+                        <p class="icon">📄</p>
+                        <p>Drag and drop your file here</p>
+                        <p class="or">or</p>
+                        <button type="button" id="selectFileBtn" class="link-btn">
+                            Select File
+                        </button>
+                    </div>
+                </div>
+                <div id="uploadProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                    <p id="uploadStatus">Uploading...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-close="uploadModal">Cancel</button>
+                <button id="confirmUploadBtn" class="btn-primary" disabled>Upload</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>
