@@ -3,11 +3,13 @@ LangGraph Contextual RAG System
 
 Flow:
 1. Retrieve document chunks
-2. Summarize with local Ollama
-3. Embed summaries with OpenAI
+2. Summarize with local Ollama (deepseek-r1:1.5b)
+3. Embed summaries with local sentence-transformers (NO API)
 4. Build chunk relationship graph with LangGraph
 5. Get global meaning with Gemini API
 6. Generate answer with Ollama (local) using all context
+
+NO OpenAI: All AI tasks use local Ollama model
 """
 
 from langgraph.graph import StateGraph, END
@@ -16,7 +18,7 @@ import os
 from dotenv import load_dotenv
 import requests
 import json
-from openai import OpenAI
+from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 from sqlalchemy.orm import Session
 from models import DocumentChunk, ChunkEmbedding
@@ -25,19 +27,27 @@ load_dotenv()
 
 # ===== CONFIGURATION =====
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama2")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "deepseek-r1:1.5b")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-K_CHUNKS = int(os.getenv("K_CHUNKS_CONTEXTUAL", 3))
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 1000))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
+K_DOCUMENTS = int(os.getenv("K_DOCUMENTS", 5))
 
 # Initialize clients
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+print(f"[Embeddings] Loading local model: {EMBEDDING_MODEL}...")
+embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+print(f"[Embeddings] OK - Local model loaded\n")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-print(f"[LangGraph] Ollama: {OLLAMA_API_URL}/{OLLAMA_MODEL}")
-print(f"[LangGraph] Gemini: {'Configured' if GEMINI_API_KEY else 'Not configured'}")
+print(f"[System] Configuration:")
+print(f"  ✓ Ollama (Local LLM): {OLLAMA_API_URL}/{OLLAMA_MODEL}")
+print(f"  ✓ Embeddings (Local): {EMBEDDING_MODEL}")
+print(f"  ✓ Gemini (Global): {GEMINI_MODEL}")
+print(f"  ✓ OpenAI: NOT USED\n")
 
 # ===== LANGRAPH STATE TYPES =====
 class ChunkState(TypedDict):
@@ -145,10 +155,11 @@ Topic:"""
         print(f"[Ollama] Topic extraction error: {str(e)}")
         return "General"
 
-# ===== 2. EMBEDDING SUMMARIES =====
+# ===== 2. EMBEDDING SUMMARIES (LOCAL - NO API) =====
 def embed_text(text: str) -> List[float]:
     """
-    Embed text using OpenAI embeddings
+    Embed text using local sentence-transformers model
+    NO API calls, NO costs, completely offline
     
     Args:
         text: Text to embed
@@ -157,13 +168,10 @@ def embed_text(text: str) -> List[float]:
         Embedding vector
     """
     try:
-        response = openai_client.embeddings.create(
-            input=text,
-            model="text-embedding-3-small"
-        )
-        embedding = response.data[0].embedding
-        print(f"[Embeddings] Generated embedding (dim={len(embedding)})")
-        return embedding
+        text = text[:512]
+        embedding = embedding_model.encode(text, convert_to_tensor=False)
+        print(f"[Embeddings] Generated embedding (dim={len(embedding)}, local, free)")
+        return embedding.tolist()
         
     except Exception as e:
         print(f"[Embeddings] Error: {str(e)}")
@@ -336,7 +344,7 @@ def get_global_meaning_with_gemini(topics: List[str], query: str) -> str:
             print("[Gemini] API key not configured")
             return "Global context unavailable"
         
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel(GEMINI_MODEL)
         
         prompt = f"""Given these document topics: {', '.join(set(topics))}
 
@@ -347,7 +355,7 @@ Provide a brief global context (2-3 sentences) explaining how these topics relat
         response = model.generate_content(prompt)
         meaning = response.text.strip()
         
-        print(f"[Gemini] Global meaning generated")
+        print(f"[Gemini] Global meaning generated using {GEMINI_MODEL}")
         return meaning
         
     except Exception as e:

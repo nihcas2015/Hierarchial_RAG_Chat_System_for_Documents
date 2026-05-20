@@ -1,11 +1,9 @@
 from langchain.document_loaders import PyPDFLoader
 from langchain_community.document_loaders import Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
-from langchain.chains import RetrievalQA
-from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
+from sentence_transformers import SentenceTransformer
 import os
 from dotenv import load_dotenv
 import shutil
@@ -13,11 +11,15 @@ import shutil
 load_dotenv()
 
 # Configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 1000))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
 K_DOCUMENTS = int(os.getenv("K_DOCUMENTS", 5))
+
+# Initialize local embedding model
+print("[RAG] Loading embedding model:", EMBEDDING_MODEL)
+embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+print("[RAG] Embedding model loaded (local, no API)")
 
 # Vector store directory
 VECTOR_STORE_DIR = "vector_stores"
@@ -85,14 +87,26 @@ def split_documents(documents: list):
     print(f"Created {len(chunks)} chunks from documents")
     return chunks
 
-# ===== EMBEDDINGS =====
+# ===== EMBEDDINGS (LOCAL - NO API) =====
 def get_embeddings():
-    """Get OpenAI embeddings"""
-    embeddings = OpenAIEmbeddings(
-        openai_api_key=OPENAI_API_KEY,
-        model="text-embedding-3-small"
-    )
-    return embeddings
+    """Get local embeddings using sentence-transformers"""
+    # Create a simple wrapper for sentence-transformers to work with FAISS
+    class LocalEmbeddings:
+        def __init__(self, model):
+            self.model = model
+        
+        def embed_documents(self, texts):
+            embeddings = []
+            for text in texts:
+                embedding = self.model.encode(text[:512], convert_to_tensor=False)
+                embeddings.append(embedding.tolist())
+            return embeddings
+        
+        def embed_query(self, text):
+            embedding = self.model.encode(text[:512], convert_to_tensor=False)
+            return embedding.tolist()
+    
+    return LocalEmbeddings(embedding_model)
 
 # ===== VECTOR STORE =====
 def create_vector_store(chunks: list, user_id: int, doc_id: int):
@@ -135,99 +149,23 @@ def delete_vector_store(user_id: int, doc_id: int):
     except Exception as e:
         print(f"Error deleting vector store: {str(e)}")
 
-# ===== RAG CHAIN =====
-def create_rag_chain(vector_store):
-    """
-    Create RAG chain for question answering
-    Combines retriever with LLM
-    """
-    
-    # Initialize LLM
-    llm = ChatOpenAI(
-        openai_api_key=OPENAI_API_KEY,
-        model_name=OPENAI_MODEL,
-        temperature=0.7,
-        max_tokens=1000
-    )
-    
-    # Create custom prompt
-    prompt_template = """You are a helpful assistant answering questions about documents.
-Use the following pieces of context to answer the question.
-If you don't know the answer based on the context, say "I don't have enough information to answer that."
+# ===== DEPRECATED: RAG CHAIN (Use langgraph_contextual_rag.py instead) =====
+# The create_rag_chain function has been removed as it used OpenAI.
+# Use langgraph_contextual_rag.py for contextual RAG with local Ollama + Gemini.
 
-Context:
-{context}
-
-Question: {question}
-
-Answer:"""
-    
-    PROMPT = PromptTemplate(
-        template=prompt_template,
-        input_variables=["context", "question"]
-    )
-    
-    # Create retrieval chain
-    chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=vector_store.as_retriever(search_kwargs={"k": K_DOCUMENTS}),
-        chain_type_kwargs={"prompt": PROMPT},
-        return_source_documents=True
-    )
-    
-    return chain
-
-# ===== QUESTION ANSWERING =====
 def answer_question(query: str, user_id: int, doc_id: int):
     """
-    Answer a question using RAG
+    DEPRECATED: Use langgraph_contextual_rag.answer_question_contextual() instead
     
-    Args:
-        query: User's question
-        user_id: User ID
-        doc_id: Document ID to search in
-    
-    Returns:
-        response: AI's answer
-        source_documents: Retrieved documents
+    This function is kept for backward compatibility only.
+    It does not generate answers, only returns error.
     """
-    
-    try:
-        # Load vector store
-        vector_store = load_vector_store(user_id, doc_id)
-        
-        if not vector_store:
-            return {
-                "error": "Vector store not found. Document may not be indexed yet.",
-                "response": None,
-                "sources": []
-            }
-        
-        # Create RAG chain
-        chain = create_rag_chain(vector_store)
-        
-        # Ask question
-        result = chain({"query": query})
-        
-        return {
-            "response": result.get("result", ""),
-            "sources": [
-                {
-                    "content": doc.page_content[:500],  # First 500 chars
-                    "metadata": doc.metadata
-                }
-                for doc in result.get("source_documents", [])
-            ]
-        }
-    
-    except Exception as e:
-        print(f"Error answering question: {str(e)}")
-        return {
-            "error": str(e),
-            "response": None,
-            "sources": []
-        }
+    return {
+        "error": "Basic RAG is deprecated. Use contextual RAG from langgraph_contextual_rag.py",
+        "response": None,
+        "sources": [],
+        "note": "Call langgraph_contextual_rag.answer_question_contextual() instead"
+    }
 
 # ===== DOCUMENT PROCESSING PIPELINE =====
 def process_document_for_rag(file_path: str, file_type: str, user_id: int, doc_id: int):
