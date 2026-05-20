@@ -1,0 +1,240 @@
+# LangChain Integration Guide
+
+## What is LangChain?
+
+LangChain is a framework for building applications with Large Language Models (LLMs).
+It provides tools for:
+- Document loading and processing
+- Text splitting and chunking
+- Embeddings and vector stores
+- Question-answering chains (RAG)
+
+## How It Works in Your System
+
+```
+User uploads PDF/DOCX
+        ↓
+[rag.py] Load document
+        ↓
+Split into chunks (1000 chars each, 200 overlap)
+        ↓
+Generate embeddings (using OpenAI)
+        ↓
+Store in FAISS vector database
+        ↓
+User asks a question
+        ↓
+Retrieve relevant chunks from vector store
+        ↓
+Send to LLM with context
+        ↓
+LLM generates answer based on document
+        ↓
+Return answer to frontend
+```
+
+## Files Created
+
+### 1. **rag.py** - Main RAG Logic
+
+**Functions:**
+
+- `load_document(file_path, file_type)` - Load PDF, DOCX, or TXT
+- `split_documents(documents)` - Split into chunks (1000 chars, 200 overlap)
+- `get_embeddings()` - Get OpenAI embeddings
+- `create_vector_store(chunks, user_id, doc_id)` - Create and save FAISS store
+- `load_vector_store(user_id, doc_id)` - Load existing vector store
+- `create_rag_chain(vector_store)` - Create question-answering chain
+- `answer_question(query, user_id, doc_id)` - Answer user's question
+- `process_document_for_rag(file_path, file_type, user_id, doc_id)` - Full pipeline
+
+### 2. **Updated documents.py**
+
+When a document is uploaded:
+1. Save file to disk
+2. Create database record
+3. Call `process_document_for_rag()` to create vector store
+4. Return success to frontend
+
+When a document is deleted:
+1. Delete file from disk
+2. Delete vector store
+3. Delete database record
+
+### 3. **Updated messages.py**
+
+When user sends a message:
+1. Create chat message record
+2. Call `answer_question()` with user's query
+3. RAG system retrieves relevant chunks
+4. LLM generates answer with context
+5. Store response and sources in database
+
+## Setup Instructions
+
+### Step 1: Install Dependencies
+
+```powershell
+cd backend
+pip install -r requirements.txt
+```
+
+### Step 2: Get OpenAI API Key
+
+1. Go to https://platform.openai.com/api-keys
+2. Create a new API key
+3. Copy it
+
+### Step 3: Update .env
+
+```
+OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_MODEL=gpt-3.5-turbo
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+K_DOCUMENTS=5
+```
+
+### Step 4: Run Backend
+
+```powershell
+python main.py
+```
+
+## How It Works Step-by-Step
+
+### Document Upload
+
+```python
+# Frontend sends file
+POST /api/documents/upload
+  ├─ File saved to: uploads/user_1_20240101_120000_document.pdf
+  ├─ Database record created
+  └─ RAG Processing:
+      ├─ Load PDF pages
+      ├─ Split into chunks
+      ├─ Generate embeddings for each chunk
+      ├─ Store in FAISS: vector_stores/user_1_doc_5/
+      └─ Ready for querying
+```
+
+### Question & Answer
+
+```python
+# Frontend sends message
+POST /api/messages/send
+  ├─ Message: "What is this document about?"
+  ├─ RAG Processing:
+  │   ├─ Load vector store for this document
+  │   ├─ Search similar chunks to user's question
+  │   ├─ Retrieve top 5 most relevant chunks
+  │   ├─ Create prompt with context + question
+  │   ├─ Send to GPT-3.5-turbo
+  │   └─ Get response
+  ├─ Response: "Based on the document, it is about..."
+  └─ Store in database with source documents
+```
+
+## Configuration Options
+
+**In .env:**
+
+- `CHUNK_SIZE=1000` - How long each chunk is (characters)
+- `CHUNK_OVERLAP=200` - Overlap between chunks (prevents splitting mid-sentence)
+- `K_DOCUMENTS=5` - How many documents to retrieve for context
+- `OPENAI_MODEL=gpt-3.5-turbo` - Which model to use
+
+**Supported File Types:**
+
+- `.pdf` - PDF documents
+- `.docx` - Word documents
+- `.txt` - Text files
+
+## Example Flow
+
+### 1. User Uploads Document
+
+```
+Frontend: POST /api/documents/upload (upload contract.pdf)
+Backend:
+  ├─ Save file
+  ├─ Create record in documents table
+  ├─ Load PDF (4 pages)
+  ├─ Split into 23 chunks
+  ├─ Generate embeddings
+  ├─ Save vector store
+  └─ Return doc_id=5
+
+Frontend: Receives doc_id=5
+```
+
+### 2. User Asks Question
+
+```
+Frontend: POST /api/messages/send (message="What are the terms?")
+Backend:
+  ├─ Get conversation.doc_id = 5
+  ├─ Load vector store for doc_id=5
+  ├─ Search for similar chunks to "What are the terms?"
+  ├─ Retrieve top 5 chunks
+  ├─ Create prompt:
+  │   "Given this context from the document:
+  │    [chunk 1: page 1, clauses...]
+  │    [chunk 2: page 2, terms...]
+  │    ...
+  │    Answer: What are the terms?"
+  ├─ Send to OpenAI API
+  ├─ Get response
+  ├─ Store in database
+  └─ Return response + sources
+
+Frontend: Displays answer and source documents
+```
+
+## Troubleshooting
+
+**Error: "OpenAI API key not found"**
+- Update .env with your OPENAI_API_KEY
+- Restart the backend
+
+**Error: "No vector store found"**
+- Document hasn't been processed yet
+- Wait for RAG processing to complete after upload
+- Check if document file exists
+
+**Error: "Chunk embedding failed"**
+- OpenAI API rate limit exceeded
+- Try with fewer documents or smaller chunk size
+- Wait and retry
+
+## Vector Store Structure
+
+```
+vector_stores/
+├── user_1_doc_1/
+│   ├── index.faiss          # Vector data
+│   └── index.pkl            # Metadata
+├── user_1_doc_2/
+│   ├── index.faiss
+│   └── index.pkl
+└── user_2_doc_1/
+    ├── index.faiss
+    └── index.pkl
+```
+
+Each user's each document has its own vector store.
+
+## Performance Tips
+
+1. **Chunk Size**: Larger chunks = more context, slower retrieval. Default 1000 is good.
+2. **K_Documents**: More documents = better context, slower. Default 5 is a good balance.
+3. **Embeddings Model**: "text-embedding-3-small" is fast and cheap.
+4. **LLM Model**: "gpt-3.5-turbo" is fast and affordable. Use "gpt-4" for better quality.
+
+## Next Steps
+
+1. Install dependencies: `pip install -r requirements.txt`
+2. Set OpenAI API key in .env
+3. Run backend: `python main.py`
+4. Upload a document via frontend
+5. Ask questions - RAG will search and answer!
