@@ -1,0 +1,97 @@
+# Backend Structure for RAG Chat System
+
+## Files Created:
+
+1. **requirements.txt** - Python dependencies to install
+2. **.env** - Configuration (database URL, secret key, API port)
+3. **main.py** - FastAPI application entry point
+4. **database.py** - PostgreSQL connection setup
+5. **models.py** - SQLAlchemy database models (matches your schema)
+6. **schemas.py** - Pydantic schemas for request/response validation
+7. **utils.py** - Password hashing and JWT token utilities
+8. **auth.py** - Authentication routes (login, signup, password reset)
+9. **documents.py** - Document upload and retrieval routes
+10. **messages.py** - Chat messages and conversations routes
+
+## File Relationships:
+
+```
+main.py (starts the app)
+├── Imports database.py (connects to PostgreSQL)
+├── Imports models.py (defines database tables)
+├── Imports schemas.py (validates data)
+├── Imports auth.py (handles login/signup)
+│   └── Uses utils.py (password hashing, JWT tokens)
+├── Imports documents.py (handles file upload)
+└── Imports messages.py (handles chat messages)
+```
+
+## What Each File Does:
+
+**main.py**
+- Creates FastAPI app
+- Starts the server on port 5000
+- Sets up CORS (allows frontend to communicate)
+- Includes all routers
+
+**database.py**
+- Connects to PostgreSQL
+- Creates session for database queries
+- Uses connection string from .env
+
+**models.py**
+- Defines User, Document, Conversation, ChatMessage tables
+- Maps to your PostgreSQL schema
+- Handles relationships between tables
+
+**schemas.py**
+- Validates incoming data (login, signup, file upload)
+- Structures outgoing responses
+- Ensures type safety
+
+**utils.py**
+- hash_password() - Securely store passwords
+- verify_password() - Check password during login
+- create_access_token() - Generate JWT tokens
+- verify_token() - Validate JWT tokens
+
+**auth.py**
+- POST /api/signup - Create new user
+- POST /api/login - User login
+- GET /api/verify-token - Check if token valid
+- POST /api/forgot-password - Password reset
+- POST /api/logout - Logout user
+
+**documents.py**
+- POST /api/documents/upload - Upload file
+- GET /api/documents - Get user's documents
+- DELETE /api/documents/{id} - Delete document
+
+**messages.py**
+- POST /api/messages/send - Send chat message
+- GET /api/conversations - Get all conversations
+- GET /api/conversations/{id}/messages - Get messages in conversation
+
+## How to Use:
+
+1. Install PostgreSQL (if not done)
+2. Run database_creation.sql to create tables
+3. Update .env with your PostgreSQL credentials
+4. Install Python dependencies: pip install -r requirements.txt
+5. Run backend: python main.py
+6. Open http://localhost:5000/docs for API documentation
+
+## Frontend-to-Backend Connection:
+
+When your frontend sends data:
+
+Frontend (login.js)
+  ↓ fetch("/api/login", {email, password})
+Backend (auth.py)
+  ↓ receives request
+PostgreSQL Database
+  ↓ checks if email exists and password matches
+Backend
+  ↓ returns {success: true, token: "xyz"}
+Frontend
+  ↓ stores token and redirects to dashboard
